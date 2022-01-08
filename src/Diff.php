@@ -6,48 +6,52 @@ use App\Acl\ResourceUndefined;
 
 use function Functional\flatten;
 
+function schemeConstruct(array $schemeGroups): array
+{
+    $delete = [array_keys($schemeGroups['delete']), array_values($schemeGroups['delete'])];
+    $add = [array_keys($schemeGroups['add']), array_values($schemeGroups['add'])];
+    $save = [array_keys($schemeGroups['save']), array_values($schemeGroups['save'])];
+    $updateFrom = [array_keys($schemeGroups['updateFrom']), array_values($schemeGroups['updateFrom'])];
+    $updateTo = [array_keys($schemeGroups['updateTo']), array_values($schemeGroups['updateTo'])];
+
+    return array_merge(
+        array_map(fn($key, $value) => ['group' => 'delete', 'operator' => '-', $key => $value], $delete[0], $delete[1]),
+        array_map(fn($key, $value) => ['group' => 'add', 'operator' => '+', $key => $value], $add[0], $add[1]),
+        array_map(fn($key, $value) => ['group' => 'save', 'operator' => ' ', $key => $value], $save[0], $save[1]),
+        array_map(
+            fn($key, $value) => ['group' => 'updateFrom', 'operator' => '-', $key => $value],
+            $updateFrom[0],
+            $updateFrom[1]
+        ),
+        array_map(
+            fn($key, $value) => ['group' => 'updateTo', 'operator' => '+', $key => $value],
+            $updateTo[0],
+            $updateTo[1]
+        )
+    );
+}
+
 function parseScheme(array $from, array $to): array
 {
     $intersect = array_intersect_key($from, $to);
-
     $delete = array_diff_key($from, $to);
     $add = array_diff_key($to, $from);
     $save = array_intersect_assoc($from, $to);
     $updateFrom = array_diff_key($intersect, $save);
     $updateTo = array_intersect_key($to, $updateFrom);
 
-    $scheme = array_merge(
-        array_map(
-            fn($key, $value) => ['group' => 'delete', 'operator' => '-', $key => $value],
-            array_keys($delete),
-            array_values($delete)
-        ),
-        array_map(
-            fn($key, $value) => ['group' => 'add', 'operator' => '+', $key => $value],
-            array_keys($add),
-            array_values($add)
-        ),
-        array_map(
-            fn($key, $value) => ['group' => 'save', 'operator' => ' ', $key => $value],
-            array_keys($save),
-            array_values($save)
-        ),
-        array_map(
-            fn($key, $value) => ['group' => 'updateFrom', 'operator' => '-', $key => $value],
-            array_keys($updateFrom),
-            array_values($updateFrom)
-        ),
-        array_map(
-            fn($key, $value) => ['group' => 'updateTo', 'operator' => '+', $key => $value],
-            array_keys($updateTo),
-            array_values($updateTo)
-        )
-    );
+    $schemeGroups = [
+        'delete' => $delete,
+        'add' => $add,
+        'save' => $save,
+        'updateFrom' => $updateFrom,
+        'updateTo' => $updateTo
+    ];
 
-    usort($scheme, function ($a, $b) {
-        $a = array_keys($a)[2];
-        $b = array_keys($b)[2];
-        return strcmp($a, $b);
+    $scheme = schemeConstruct($schemeGroups);
+
+    usort($scheme, function (array $a, array $b) {
+        return strcmp(array_keys($a)[2], array_keys($b)[2]);
     });
 
     return $scheme;
@@ -65,11 +69,10 @@ function format(array $scheme): string
 
         return "{$field['operator']} {$key}: {$value}";
     }, $scheme);
- 
+
     return array_reduce($newScheme, function ($initial, $field) {
         return "{$initial}\t{$field}\n";
     }, "{\n") . "}\n";
-    return '';
 }
 
 function gendiff(string $from = null, string $to = null): string
