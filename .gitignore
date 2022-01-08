@@ -1,0 +1,7 @@
+vendor
+doc
+logs
+*.swo
+*.swp
+*.cache
+build
