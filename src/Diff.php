@@ -11,49 +11,65 @@ function parseScheme(array $from, array $to): array
     $intersect = array_intersect_key($from, $to);
 
     $delete = array_diff_key($from, $to);
-    $save = array_intersect_assoc($from, $to);
     $add = array_diff_key($to, $from);
+    $save = array_intersect_assoc($from, $to);
     $updateFrom = array_diff_key($intersect, $save);
     $updateTo = array_intersect_key($to, $updateFrom);
-    return [
-        'delete' => $delete,
-        'add' => $add,
-        'save' => $save,
-        'updateFrom' => $updateFrom,
-        'updateTo' => $updateTo
-    ];
-}
 
-function formatStringByScheme(array $scheme): string
-{
-    $parsedArray = array_map(function ($keyGroup, $group) {
-        $operator = ' ';
+    $scheme = array_merge(
+        array_map(
+            fn($key, $value) => ['group' => 'delete', 'operator' => '-', $key => $value],
+            array_keys($delete),
+            array_values($delete)
+        ),
+        array_map(
+            fn($key, $value) => ['group' => 'add', 'operator' => '+', $key => $value],
+            array_keys($add),
+            array_values($add)
+        ),
+        array_map(
+            fn($key, $value) => ['group' => 'save', 'operator' => ' ', $key => $value],
+            array_keys($save),
+            array_values($save)
+        ),
+        array_map(
+            fn($key, $value) => ['group' => 'updateFrom', 'operator' => '-', $key => $value],
+            array_keys($updateFrom),
+            array_values($updateFrom)
+        ),
+        array_map(
+            fn($key, $value) => ['group' => 'updateTo', 'operator' => '+', $key => $value],
+            array_keys($updateTo),
+            array_values($updateTo)
+        )
+    );
 
-        if ($keyGroup === 'add' || $keyGroup === 'updateTo') {
-            $operator = '+';
-        } elseif ($keyGroup === 'delete' || $keyGroup === 'updateFrom') {
-            $operator = '-';
-        }
-
-        return array_map(fn($key, $value) => "{$operator} {$key}: {$value}", array_keys($group), array_values($group));
-    }, array_keys($scheme), array_values($scheme));
-
-    $formatedString = flatten($parsedArray);
-    usort($formatedString, function ($a, $b) {
-        return strcmp($a[2], $b[2]);
+    usort($scheme, function ($a, $b) {
+        $a = array_keys($a)[2];
+        $b = array_keys($b)[2];
+        return strcmp($a, $b);
     });
 
-    $formatedStringLastElement = explode(': ', $formatedString[count($formatedString) - 1])[1];
+    return $scheme;
+}
 
-    return array_reduce($formatedString, function ($acc, $field) use ($formatedStringLastElement) {
-        $value = explode(': ', $field)[1];
+function format(array $scheme): string
+{
+    $newScheme = array_map(function ($field) {
+        $key = array_keys($field)[2];
+        $value = array_values($field)[2];
 
-        if ($value != $formatedStringLastElement) {
-            return "{$acc}\t{$field}\n";
+        if (gettype($value) === 'boolean') {
+            $value = $value ? 'true' : 'false';
         }
 
-        return "{$acc}\t{$field}\n}\n";
-    }, "\n{\n");
+        return "{$field['operator']} {$key}: {$value}";
+    }, $scheme);
+ 
+    return array_reduce($newScheme, function ($initial, $field) {
+        return "{$initial}\t{$field}\n";
+    }, "{\n") . "}\n";
+    return '';
 }
 
 function gendiff(string $from = null, string $to = null): string
@@ -65,8 +81,9 @@ function gendiff(string $from = null, string $to = null): string
     $toData = json_decode($to, true);
 
     $scheme = parseScheme($fromData, $toData);
-    $formatedString = formatStringByScheme($scheme);
-    return $formatedString;
+    $string = format($scheme);
+
+    return $string;
 }
 
 function printDiff(string $data): void
